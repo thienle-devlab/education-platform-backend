@@ -1,0 +1,370 @@
+# ============================================
+# DOCKER COMPOSE - UNIFIED CONFIG
+# ============================================
+# 1 file duy nhất với multiple profiles
+# ============================================
+# USAGE:
+# 
+# Development (databases only):
+#   docker-compose up -d
+#
+# Development + Kafka:
+#   docker-compose --profile with-kafka up -d
+#
+# Full Stack (all services):
+#   docker-compose --profile full-stack up -d --build
+#
+# Full Stack + Kafka UI:
+#   docker-compose --profile full-stack --profile with-kafka-ui up -d --build
+# ============================================
+
+#version: '3.8'
+
+services:
+  # ============================================
+  # AUTH DATABASE
+  # ============================================
+  auth-db:
+    image: postgres:15-alpine
+    container_name: education-auth-db
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+      POSTGRES_USER: ${AUTH_DB_USERNAME:-auth_user}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-auth_password_dev_only}
+#      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${AUTH_DB_PORT:-5432}:5432"
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+      - ./init-scripts/auth-db:/docker-entrypoint-initdb.d
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USERNAME:-auth_user} -d ${AUTH_DB_NAME:-auth_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # USER DATABASE
+  # ============================================
+  user-db:
+    image: postgres:15-alpine
+    container_name: education-user-db
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME:-user_db}
+      POSTGRES_USER: ${USER_DB_USERNAME:-user_user}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-user_password_dev_only}
+#      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${USER_DB_PORT:-5433}:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+      - ./init-scripts/user-db:/docker-entrypoint-initdb.d
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USERNAME:-user_user} -d ${USER_DB_NAME:-user_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # PGADMIN - Always available
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: education-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@educationplatform.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - education-network
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      user-db:
+        condition: service_healthy
+
+  # ============================================
+  # ZOOKEEPER - Only with Kafka profiles
+  # ============================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: education-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_PORT:-2181}
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - with-kafka
+      - full-stack
+
+  # ============================================
+  # KAFKA - Only with Kafka profiles
+  # ============================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: education-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_INTERNAL_PORT:-29092}:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+#      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - with-kafka
+      - full-stack
+
+  # ============================================
+  # KAFKA UI - Optional (explicit profile)
+  # ============================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: education-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: education-platform
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - education-network
+    profiles:
+      - with-kafka-ui
+      - full-stack
+
+  # ============================================
+  # REDIS (Optional - for caching)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: education-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server ${REDIS_PASSWORD:+--requirepass} ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - with-redis
+      - full-stack
+
+  # ============================================
+  # AUTH SERVICE - Only with full-stack profile
+  # ============================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: education-auth-service
+    ports:
+      - "${AUTH_SERVICE_PORT:-8081}:8081"
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: docker
+      
+      # Database
+      AUTH_DB_HOST: auth-db
+      AUTH_DB_PORT: 5432
+      AUTH_DB_NAME: ${AUTH_DB_NAME:-auth_db}
+      AUTH_DB_USERNAME: ${AUTH_DB_USERNAME:-auth_user}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth_db
+#      SPRING_DATASOURCE_USERNAME: auth_user
+#      SPRING_DATASOURCE_PASSWORD: auth_password_dev_only
+      
+      # JPA
+#      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+#      SPRING_JPA_SHOW_SQL: 'true'
+#      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      
+      # Server
+      SERVER_PORT: 8081
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900000}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
+      
+      # Kafka
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+
+      # Email (optional)
+#      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+#      MAIL_PORT: ${MAIL_PORT:-587}
+#      MAIL_USERNAME: ${MAIL_USERNAME}
+#      MAIL_PASSWORD: ${MAIL_PASSWORD}
+#      MAIL_FROM: ${MAIL_FROM:-noreply@educationplatform.com}
+
+      # CORS
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-DEBUG}
+      SQL_LOG_LEVEL: ${SQL_LOG_LEVEL:-DEBUG}
+      
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - education-network
+    restart: unless-stopped
+    profiles:
+      - full-stack
+
+  # ============================================
+  # USER SERVICE - Only with full-stack profile
+  # ============================================
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: education-user-service
+    ports:
+      - "${USER_SERVICE_PORT:-8082}:8082"
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: docker
+      
+      # Database
+      USER_DB_HOST: user-db
+      USER_DB_PORT: 5432
+      USER_DB_NAME: ${USER_DB_NAME:-user_db}
+      USER_DB_USERNAME: ${USER_DB_USERNAME:-user_user}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/user_db
+#      SPRING_DATASOURCE_USERNAME: user_user
+#      SPRING_DATASOURCE_PASSWORD: user_password_dev_only
+
+      # JPA
+#      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+#      SPRING_JPA_SHOW_SQL: 'true'
+#      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      
+      # Server
+      SERVER_PORT: 8082
+      
+      # Kafka
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-user-service-group}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-DEBUG}
+      SQL_LOG_LEVEL: ${SQL_LOG_LEVEL:-DEBUG}
+      
+    depends_on:
+      user-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - education-network
+    restart: unless-stopped
+    profiles:
+      - full-stack
+
+  # ============================================
+  # GATEWAY (Optional - with full-stack profile)
+  # ============================================
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: education-gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: docker
+      # Server
+      GATEWAY_PORT: 8080
+
+      # Service URLs (use container names in Docker)
+      AUTH_SERVICE_URL: http://auth-service:8081
+      USER_SERVICE_URL: http://user-service:8082
+
+      # CORS
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ALLOWED_ORIGIN_1: ${ALLOWED_ORIGIN_1:-http://localhost:4200}
+      ALLOWED_ORIGIN_2: ${ALLOWED_ORIGIN_2:-http://localhost:8080}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      GATEWAY_LOG_LEVEL: ${GATEWAY_LOG_LEVEL:-DEBUG}
+
+    depends_on:
+      - auth-service
+      - user-service
+    networks:
+      - education-network
+    restart: unless-stopped
+    profiles:
+      - full-stack
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  auth-db-data:
+    driver: local
+  user-db-data:
+    driver: local
+  pgadmin-data:
+    driver: local
+  redis-data:
+    driver: local
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  education-network:
+    driver: bridge

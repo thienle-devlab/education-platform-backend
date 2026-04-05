@@ -1,0 +1,251 @@
+# ============================================
+# AUTH SERVICE - APPLICATION CONFIGURATION
+# ============================================
+# File: auth-service/src/main/resources/application.yml
+# ============================================
+
+spring:
+  application:
+    name: auth-service
+
+  # ============================================
+  # DATASOURCE CONFIGURATION
+  # ============================================
+  datasource:
+    url: jdbc:postgresql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT:5432}/${AUTH_DB_NAME:auth_db}
+    username: ${AUTH_DB_USERNAME:auth_user}
+    password: ${AUTH_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+    # HikariCP Connection Pool
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      auto-commit: true
+
+  # ============================================
+  # JPA / HIBERNATE CONFIGURATION
+  # ============================================
+  jpa:
+    # IMPORTANT: validate only - schema already created by SQL scripts
+    hibernate:
+      ddl-auto: ${HIBERNATE_DDL_AUTO:validate}
+
+    # Show SQL queries in console
+    show-sql: ${SHOW_SQL:true}
+
+    properties:
+      hibernate:
+        # PostgreSQL dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+        # Format SQL for readability
+        format_sql: true
+
+        # Use new ID generator
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+        # Enable query statistics (dev only)
+        generate_statistics: false
+
+    # Open EntityManager in View
+    open-in-view: false
+
+  # ==========================================
+  # KAFKA CONFIGURATION
+  # ==========================================
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      linger-ms: 5
+      buffer-memory: 33554432
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        spring.json.add.type.headers: false
+        request.timeout.ms: 30000
+
+  # ==========================================
+  # EMAIL CONFIGURATION
+  # ==========================================
+#  mail:
+#    host: ${MAIL_HOST:smtp.gmail.com}
+#    port: ${MAIL_PORT:587}
+#    username: ${MAIL_USERNAME}
+#    password: ${MAIL_PASSWORD}
+#    properties:
+#      mail:
+#        smtp:
+#          auth: true
+#          starttls:
+#            enable: true
+#            required: true
+#          connectiontimeout: 5000
+#          timeout: 5000
+#          writetimeout: 5000
+#    from: ${MAIL_FROM:noreply@educationplatform.com}
+
+# Externalize topic settings
+kafka:
+  topic:
+    partitions: 3
+    replicas: 1
+
+# ============================================
+# SERVER CONFIGURATION
+# ============================================
+server:
+  port: ${AUTH_SERVICE_PORT:8081}
+  servlet:
+    context-path: /api/auth
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: false
+
+# ============================================
+# LOGGING CONFIGURATION
+# ============================================
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+#    com.education.auth: ${APP_LOG_LEVEL:DEBUG}
+    com.lethien.auth_service: ${APP_LOG_LEVEL:DEBUG}
+    org.springframework.web: ${WEB_LOG_LEVEL:DEBUG}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}
+    org.hibernate.SQL: ${SQL_LOG_LEVEL:DEBUG}
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:logs/auth-service.log}
+
+# ============================================
+# JWT CONFIGURATION
+# ============================================
+jwt:
+  secret: ${JWT_SECRET} #your-secret-key-change-this-in-production-minimum-256-bits-long
+  expiration: ${JWT_EXPIRATION:900000}          # 15 minutes in milliseconds
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 days in milliseconds
+
+# ==========================================
+# APPLICATION SPECIFIC
+# ==========================================
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  verification-url: ${FRONTEND_URL:http://localhost:3000}/verify-email
+
+# ============================================
+# CORS CONFIGURATION
+# ============================================
+cors:
+  allowed-origins:
+    - ${FRONTEND_URL:http://localhost:3000}
+    - ${ALLOWED_ORIGIN_1:http://localhost:4200}
+    - ${ALLOWED_ORIGIN_2:http://localhost:8080}
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allowed-headers:
+    - "*"
+  allow-credentials: true
+
+# ============================================
+# ACTUATOR CONFIGURATION (Health checks)
+# ============================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: ${HEALTH_SHOW_DETAILS:always}
+  health:
+    db:
+      enabled: true
+# ============================================
+# SPRINGDOC / SWAGGER CONFIGURATION
+# ============================================
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method        # Sắp xếp API theo HTTP method
+    tags-sorter: alpha               # Sắp xếp tag theo alphabet
+    try-it-out-enabled: true         # Bật sẵn nút "Try it out"
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  show-actuator: false               # Ẩn các endpoint của actuator khỏi Swagger
+
+---
+# ============================================
+# DOCKER PROFILE
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: jdbc:postgresql://auth-db:5432/auth_db
+    username: auth_user
+    password: auth_password_dev_only
+
+  kafka:
+    bootstrap-servers: kafka:29092
+
+server:
+  port: 8081
+
+logging:
+  level:
+    root: INFO
+    com.lethien.auth_service: INFO
+#    com.education.auth: INFO
+---
+# ============================================
+# PRODUCTION PROFILE
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        generate_statistics: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+logging:
+  level:
+    root: WARN
+    com.education.auth: INFO
+  file:
+    name: /var/log/auth-service/application.log

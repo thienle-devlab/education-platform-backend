@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+    <!-- ============================================ -->
+    <!-- PARENT: Trỏ về education (root parent pom)  -->
+    <!-- ============================================ -->
+    <parent>
+        <groupId>com.lethien</groupId>
+        <artifactId>education</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <!-- ============================================ -->
+    <!-- MODULE IDENTITY                             -->
+    <!-- groupId & version kế thừa từ parent        -->
+    <!-- ============================================ -->
+    <artifactId>auth-service</artifactId>
+    <name>auth-service</name>
+    <description>Authentication Service - Xử lý đăng ký, đăng nhập, JWT</description>
+
+    <!-- ============================================ -->
+    <!-- DEPENDENCIES                                -->
+    <!-- KHÔNG cần khai báo lại: lombok, devtools,  -->
+    <!-- starter-test (đã có ở parent)               -->
+    <!-- KHÔNG cần khai báo version (đã có ở parent) -->
+    <!-- ============================================ -->
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!-- Internal: Dùng shared code từ common-lib -->
+        <dependency>
+            <groupId>com.lethien</groupId>
+            <artifactId>common-lib</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- JPA + Database -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL Driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
+        <!-- JWT -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+        </dependency>
+
+        <!-- MapStruct -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+
+        <!-- SpringDoc OpenAPI / Swagger UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================ -->
+    <!-- BUILD                                       -->
+    <!-- auth-service là Spring Boot app nên dùng   -->
+    <!-- spring-boot-maven-plugin để tạo fat JAR     -->
+    <!-- Config plugin đã khai báo ở parent rồi,    -->
+    <!-- chỉ cần khai báo lại để kích hoạt          -->
+    <!-- ============================================ -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
