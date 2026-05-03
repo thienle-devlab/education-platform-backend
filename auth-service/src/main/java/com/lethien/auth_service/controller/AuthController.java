@@ -14,7 +14,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 /**
  * REST Controller for authentication endpoints
@@ -111,6 +114,8 @@ public class AuthController {
                 ApiResponse.success("Login successful", response)
         );
     }
+
+    // TODO: Xóa tài khoản rác nếu sau thời gian hết hạn người dùng không kích hoạt email đăng kí tài khoản
 
     /**
      * Verify email with token
@@ -252,6 +257,138 @@ public class AuthController {
     }
 
     /**
+     * Request email change
+     */
+    @Operation(
+            summary = "Request email change",
+            description = "Request to change account email. Verification link will be sent to the new email address."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Verification email sent to new address",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request or same email"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "Invalid current password"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "Email already exists"
+            )
+    })
+    @PostMapping("/email/change")
+    public ResponseEntity<ApiResponse<EmailChangeResponse>> requestEmailChange(
+            @Valid @RequestBody EmailChangeRequest request
+    ) {
+        UUID accountId = getCurrentAccountId();
+        log.info("POST /api/auth/email/change - accountId: {}", accountId);
+
+        EmailChangeResponse response = authService.requestEmailChange(accountId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Verification email sent to " + request.getNewEmail(), response)
+        );
+    }
+
+    /**
+     * Confirm email change with token
+     */
+    @Operation(
+            summary = "Confirm email change",
+            description = "Confirm email change using verification token sent to the new email address."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Email changed successfully"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid or expired token"
+            )
+    })
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "")  // No auth required — dùng token trong link
+    @GetMapping("/email/change/confirm")
+    public ResponseEntity<ApiResponse<Void>> confirmEmailChange(
+            @RequestParam("token") String token
+    ) {
+        log.info("GET /api/auth/email/change/confirm - token: {}", token);
+
+        authService.confirmEmailChange(token);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Email changed successfully")
+        );
+    }
+
+    /**
+     * Cancel pending email change
+     */
+    @Operation(
+            summary = "Cancel email change",
+            description = "Cancel a pending email change request."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Email change cancelled"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "No pending email change request found"
+            )
+    })
+    @DeleteMapping("/email/change")
+    public ResponseEntity<ApiResponse<Void>> cancelEmailChange(
+    ) {
+        UUID accountId = getCurrentAccountId();
+        log.info("DELETE /api/auth/email/change - accountId: {}", accountId);
+
+        authService.cancelEmailChange(accountId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Email change cancelled")
+        );
+    }
+
+    /**
+     * Resend email change verification
+     */
+    @Operation(
+            summary = "Resend email change verification",
+            description = "Resend verification link to the pending new email address."
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Verification email resent",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "No pending email change request found"
+            )
+    })
+    @PostMapping("/email/change/resend")
+    public ResponseEntity<ApiResponse<EmailChangeResponse>> resendEmailChangeVerification(
+            @RequestAttribute("accountId") UUID accountId
+    ) {
+        log.info("POST /api/auth/email/change/resend - accountId: {}", accountId);
+
+        EmailChangeResponse response = authService.resendEmailChangeVerification(accountId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Verification email resent", response)
+        );
+    }
+
+    /**
      * Health check endpoint
      */
     @Operation(
@@ -281,5 +418,16 @@ public class AuthController {
         }
 
         return request.getRemoteAddr();
+    }
+
+    /**
+     * Get current authenticated account ID from JWT
+     * Principal is set by JwtAuthenticationFilter as UUID
+     */
+    private UUID getCurrentAccountId () {
+        return (UUID) SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getPrincipal();
     }
 }

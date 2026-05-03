@@ -1,5 +1,7 @@
 package com.lethien.auth_service.config;
 
+import com.lethien.auth_service.security.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -9,10 +11,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private static final String[] PUBLIC_URLS = {
             // Swagger / OpenAPI
             "/swagger-ui/**",
@@ -30,7 +36,8 @@ public class SecurityConfig {
             "/forgot-password",
             "/reset-password",
             "/health",
-            "/actuator/health"
+            "/actuator/health",
+            "/email/change/confirm"
     };
 
     @Bean
@@ -44,6 +51,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_URLS).permitAll()
                         .anyRequest().authenticated()
+                )
+                // Đăng ký JWT filter
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
                 );
 
         return http.build();

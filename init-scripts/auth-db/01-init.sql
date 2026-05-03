@@ -39,10 +39,21 @@ CREATE TABLE accounts (
     CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
 );
 
+-- Alter table
+ALTER TABLE accounts
+    ADD COLUMN pending_email          VARCHAR(255),
+    ADD COLUMN email_change_token     TEXT,
+    ADD COLUMN email_change_expired_at TIMESTAMP WITH TIME ZONE;
+
 -- Indexes for accounts table
 CREATE INDEX idx_accounts_email ON accounts(email);
 CREATE INDEX idx_accounts_status ON accounts(status);
 CREATE INDEX idx_accounts_verification_token ON accounts(verification_token) WHERE verification_token IS NOT NULL;
+
+-- Create index for email_change_token
+CREATE INDEX idx_accounts_email_change_token
+    ON accounts(email_change_token)
+    WHERE email_change_token IS NOT NULL;
 
 -- Comments
 COMMENT ON TABLE accounts IS 'Stores user authentication accounts';

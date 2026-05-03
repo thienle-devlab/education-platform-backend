@@ -28,4 +28,11 @@ public class KafkaTopics {
 
     /** Published when an account is deleted */
     public static final String ACCOUNT_DELETED = "auth.account.deleted";
+
+    // ============================================
+    // AUTH SERVICE — Email change events
+    // ============================================
+    public static final String EMAIL_CHANGE_REQUESTED  = "auth.email.change.requested";
+    public static final String EMAIL_CHANGE_CONFIRMED  = "auth.email.change.confirmed";
+    public static final String EMAIL_CHANGE_CANCELLED  = "auth.email.change.cancelled";
 }

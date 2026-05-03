@@ -40,6 +40,13 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     boolean existsByEmailIgnoreCase(@Param("email") String email);
 
     /**
+     * Find email change token
+     */
+    Optional<Account> findByEmailChangeToken(String token);
+
+    boolean existsByPendingEmail(String pendingEmail);
+
+    /**
      * Find account by verification token
      */
     Optional<Account> findByVerificationToken(String verificationToken);

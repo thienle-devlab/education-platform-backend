@@ -2,6 +2,9 @@ package com.lethien.auth_service.service;
 
 import com.lethien.common_lib.constant.KafkaTopics;
 import com.lethien.common_lib.event.AccountCreatedEvent;
+import com.lethien.common_lib.event.EmailChangeCancelledEvent;
+import com.lethien.common_lib.event.EmailChangeConfirmedEvent;
+import com.lethien.common_lib.event.EmailChangeRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -56,5 +59,32 @@ public class EventPublisherService {
                         event.getAccountId(), ex.getMessage(), ex);
             }
         });
+    }
+
+    public void publishEmailChangeRequestedEvent (EmailChangeRequestedEvent event) {
+        try {
+            kafkaTemplate.send(KafkaTopics.EMAIL_CHANGE_REQUESTED, event.getAccountId().toString(), event);
+            log.info("Published EmailChangeRequestedEvent: accountId={}", event.getAccountId());
+        } catch (Exception e) {
+            log.error("Failed to publish EmailChangeRequestedEvent: accountId={}", event.getAccountId(), e);
+        }
+    }
+
+    public void publishEmailChangeConfirmedEvent (EmailChangeConfirmedEvent event) {
+        try {
+            kafkaTemplate.send(KafkaTopics.EMAIL_CHANGE_CONFIRMED, event.getAccountId().toString(), event);
+            log.info("Published EmailChangeConfirmedEvent: accountId={}", event.getAccountId());
+        } catch (Exception e) {
+            log.error("Failed to publish EmailChangeConfirmedEvent: accountId={}", event.getAccountId(), e);
+        }
+    }
+
+    public void publishEmailChangeCancelledEvent(EmailChangeCancelledEvent event) {
+        try {
+            kafkaTemplate.send(KafkaTopics.EMAIL_CHANGE_CANCELLED, event.getAccountId().toString(), event);
+            log.info("Published EmailChangeCancelledEvent: accountId={}", event.getAccountId());
+        } catch (Exception e) {
+            log.error("Failed to publish EmailChangeCancelledEvent: accountId={}", event.getAccountId(), e);
+        }
     }
 }

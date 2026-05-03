@@ -92,4 +92,61 @@ public class KafkaTopicConfig {
                 .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(30 * 24 * 60 * 60 * 1000L))
                 .build();
     }
+
+    // ============================================
+    // EMAIL CHANGE EVENTS
+    // ============================================
+
+    /**
+     * auth.email.change.requested
+     * Published khi user submit form đổi email — chưa xác nhận.
+     * Consumed by: User Service (chỉ log, không sync DB).
+     *
+     * retention.ms = 1 day — event này chỉ có giá trị trong thời gian
+     * token còn hiệu lực (24h), giữ lâu hơn không có ý nghĩa.
+     */
+    @Bean
+    public NewTopic emailChangeRequestedTopic () {
+        return TopicBuilder
+                .name(KafkaTopics.EMAIL_CHANGE_REQUESTED)
+                .partitions(partitions)
+                .replicas(replicas)
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(24 * 60 * 60 * 1000L))
+                .build();
+    }
+
+    /**
+     * auth.email.change.confirmed
+     * Published khi user click link xác nhận — email chính thức được đổi.
+     * Consumed by: User Service (sync email vào user_db).
+     *
+     * retention.ms = 7 days — đủ thời gian để User Service xử lý
+     * kể cả khi bị downtime ngắn.
+     */
+    @Bean
+    public NewTopic emailChangeConfirmedTopic () {
+        return TopicBuilder
+                .name(KafkaTopics.EMAIL_CHANGE_CONFIRMED)
+                .partitions(partitions)
+                .replicas(replicas)
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(7 * 24 * 60 * 60 * 1000L))
+                .build();
+    }
+
+    /**
+     * auth.email.change.cancelled
+     * Published khi user huỷ hoặc token hết hạn.
+     * Consumed by: User Service (chỉ log, không cần rollback).
+     *
+     * retention.ms = 1 day — tương tự REQUESTED, không cần giữ lâu.
+     */
+    @Bean
+    public NewTopic emailChangeCancelledTopic() {
+        return TopicBuilder
+                .name(KafkaTopics.EMAIL_CHANGE_CANCELLED)
+                .partitions(partitions)
+                .replicas(replicas)
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(24 * 60 * 60 * 1000L))
+                .build();
+    }
 }

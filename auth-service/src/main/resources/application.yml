@@ -74,8 +74,13 @@ spring:
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
-        spring.json.add.type.headers: false
+        spring.json.add.type.headers: true
         request.timeout.ms: 30000
+        spring.json.type.mapping: >
+          ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent,
+          EMAIL_CHANGE_REQUESTED:com.lethien.common_lib.event.EmailChangeRequestedEvent,
+          EMAIL_CHANGE_CONFIRMED:com.lethien.common_lib.event.EmailChangeConfirmedEvent,
+          EMAIL_CHANGE_CANCELLED:com.lethien.common_lib.event.EmailChangeCancelledEvent
 
   # ==========================================
   # EMAIL CONFIGURATION

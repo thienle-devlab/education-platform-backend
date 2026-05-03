@@ -141,6 +141,22 @@ COMMENT ON COLUMN user_settings.language IS 'Preferred language (vi, en, ja, ko,
 COMMENT ON COLUMN user_settings.timezone IS 'User timezone for date/time display';
 COMMENT ON COLUMN user_settings.theme IS 'UI theme preference (light, dark, auto)';
 
+
+-- ============================================
+-- TABLE: processed_events
+-- ============================================
+CREATE TABLE processed_events (
+    id               UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    idempotency_key  VARCHAR(255) NOT NULL UNIQUE,
+    processed_at     TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+-- Indexes for processed_events
+CREATE INDEX idx_processed_events_key ON processed_events(idempotency_key);
+
+-- Comments
+COMMENT ON TABLE processed_events IS 'Lưu các event đã xử lý để tránh duplicate khi Kafka deliver lại';
+
 -- ============================================
 -- TRIGGERS
 -- ============================================

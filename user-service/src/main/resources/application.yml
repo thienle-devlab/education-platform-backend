@@ -72,11 +72,13 @@ spring:
       properties:
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: "com.lethien.common_lib.event"
-        spring.json.use.type.headers: false
-        spring.json.value.default.type: "com.lethien.common_lib.event.AccountCreatedEvent"
-#        spring.json.type.mapping: "ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent"
-#          ACCOUNT_UPDATED:com.lethien.common_lib.event.AccountUpdatedEvent,
-#          ACCOUNT_DELETED:com.lethien.common_lib.event.AccountDeletedEvent
+        spring.json.use.type.headers: true
+#        spring.json.value.default.type: "com.lethien.common_lib.event.AccountCreatedEvent"
+        spring.json.type.mapping: >
+          ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent,
+          EMAIL_CHANGE_REQUESTED:com.lethien.common_lib.event.EmailChangeRequestedEvent,
+          EMAIL_CHANGE_CONFIRMED:com.lethien.common_lib.event.EmailChangeConfirmedEvent,
+          EMAIL_CHANGE_CANCELLED:com.lethien.common_lib.event.EmailChangeCancelledEvent
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

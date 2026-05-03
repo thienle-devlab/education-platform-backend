@@ -8,6 +8,9 @@ import com.lethien.auth_service.repository.LoginAttemptRepository;
 import com.lethien.auth_service.repository.LoginSessionRepository;
 import com.lethien.auth_service.repository.RefreshTokenRepository;
 import com.lethien.common_lib.event.AccountCreatedEvent;
+import com.lethien.common_lib.event.EmailChangeCancelledEvent;
+import com.lethien.common_lib.event.EmailChangeConfirmedEvent;
+import com.lethien.common_lib.event.EmailChangeRequestedEvent;
 import com.lethien.common_lib.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 
 import com.lethien.auth_service.exception.AccountLockedException;
+
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
@@ -371,6 +375,203 @@ public class AuthService {
                 email // Use email as name for now
         );
 
+        // Thông báo bảo mật tới email cũ — phòng trường hợp bị chiếm tài khoản
+        emailService.sendEmailChangeNotification(
+                account.getEmail(),
+                account.getPendingEmail()
+        );
+
         log.info("Verification email resent to: {}", email);
+    }
+
+    /**
+     * Step 1: Request email change
+     * User cung cấp email mới + password hiện tại để xác nhận danh tính
+     */
+    @Transactional
+    public EmailChangeResponse requestEmailChange(UUID accountId, EmailChangeRequest request) {
+        log.info("Email change requested: accountId={}", accountId);
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Account not found: " + accountId));
+
+        // 1. Xác nhận mật khẩu — tránh kẻ khác đổi email nếu quên đăng xuất
+        if (!passwordEncoder.matches(request.getCurrentPassword(), account.getPasswordHash())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+
+        // 2. Không cho đổi sang email đang dùng
+        if (account.getEmail().equalsIgnoreCase(request.getNewEmail())) {
+            throw new IllegalArgumentException("New email must be different from current email");
+        }
+
+        // 3. Kiểm tra email mới chưa được dùng bởi account khác
+        if (accountRepository.existsByEmailIgnoreCase(request.getNewEmail())) {
+            throw new EmailAlreadyExistsException("Email already exists: " + request.getNewEmail());
+        }
+
+        // 4. Kiểm tra email mới không đang pending ở account khác
+        if (accountRepository.existsByPendingEmail(request.getNewEmail())) {
+            throw new EmailAlreadyExistsException("Email is already pending for another account");
+        }
+
+        // 5. Tạo token — theo đúng pattern verificationToken đang có
+        String token = UUID.randomUUID().toString();
+        ZonedDateTime expiredAt = ZonedDateTime.now().plusHours(24);
+
+        account.requestEmailChange(request.getNewEmail(), token, expiredAt);
+        accountRepository.save(account);
+
+        // 6. Gửi email xác nhận tới email MỚI — theo pattern sendVerificationEmail
+        try {
+            emailService.sendEmailChangeVerification(
+                    request.getNewEmail(),
+                    token,
+                    account.getEmail() // Thông báo email cũ đang được thay thế
+            );
+            log.info("Email change verification sent to: {}", request.getNewEmail());
+        } catch (Exception e) {
+            log.error("Failed to send email change verification to: {}", request.getNewEmail(), e);
+            // Không fail request — user có thể resend
+        }
+
+        // 7. Publish event — theo đúng pattern publishAccountCreatedEvent
+        eventPublisherService.publishEmailChangeRequestedEvent(
+                EmailChangeRequestedEvent.builder()
+                        .accountId(accountId)
+                        .currentEmail(account.getEmail())
+                        .requestedEmail(request.getNewEmail())
+                        .expiresAt(expiredAt)
+                        .build()
+        );
+
+        return EmailChangeResponse.builder()
+                .message("Verification email sent to " + request.getNewEmail() +
+                        ". Please check your inbox to confirm.")
+                .pendingEmail(request.getNewEmail())
+                .expiredAt(expiredAt)
+                .build();
+    }
+
+    /**
+     * Step 2: Confirm email change
+     * User click link trong email → token được verify → email chính thức đổi
+     */
+    @Transactional
+    public void confirmEmailChange (String token) {
+        log.info("Confirming email change with token: {}", token);
+
+        Account account = accountRepository.findByEmailChangeToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Invalid email change token"));
+
+        // 1. Kiểm tra token còn hạn — theo pattern verifyEmail()
+        if (account.isEmailChangeTokenExpired()) {
+            // Auto cancel nếu expired
+            String cancelledEmail = account.getPendingEmail();
+            account.cancelEmailChange();
+            accountRepository.save(account);
+
+            // Publish CANCELLED event
+            eventPublisherService.publishEmailChangeCancelledEvent(
+                    EmailChangeCancelledEvent.builder()
+                            .accountId(account.getId())
+                            .cancelledEmail(cancelledEmail)
+                            .reason("EXPIRED")
+                            .build()
+            );
+            throw new InvalidTokenException("Email change token has expired. Please request again.");
+        }
+        String oldEmail   = account.getEmail();
+        String newEmail   = account.getPendingEmail();
+
+        // 2. Confirm — dùng business method trên entity
+        account.confirmEmailChange();
+        accountRepository.save(account);
+
+        log.info("Email changed successfully: accountId={}, oldEmail={}, newEmail={}",
+                account.getId(), oldEmail, newEmail);
+
+        // 3. Publish CONFIRMED — User Service sẽ sync email tại đây
+        eventPublisherService.publishEmailChangeConfirmedEvent(
+                EmailChangeConfirmedEvent.builder()
+                        .accountId(account.getId())
+                        .oldEmail(oldEmail)
+                        .newEmail(newEmail)
+                        .confirmedAt(ZonedDateTime.now())
+                        .build()
+        );
+
+        // 4. Revoke tất cả refresh token cũ — bắt user login lại với email mới
+        int revoked = refreshTokenRepository.revokeAllTokensByAccountId(account.getId(), ZonedDateTime.now());
+        log.info("Revoked {} refresh tokens after email change: accountId={}", revoked, account.getId());
+    }
+
+    /**
+     * Step 3: Cancel email change (user chủ động huỷ)
+     */
+    public void cancelEmailChange (UUID accountId) {
+        log.info("Cancelling email change: accountId={}", accountId);
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Account not found: " + accountId));
+
+        if (!account.hasEmailChangePending()) {
+            throw new IllegalStateException("No pending email change request found");
+        }
+
+        String cancelledEmail = account.getPendingEmail();
+        account.cancelEmailChange();
+        accountRepository.save(account);
+
+        // Publish CANCELLED event
+        eventPublisherService.publishEmailChangeCancelledEvent(
+                EmailChangeCancelledEvent.builder()
+                        .accountId(accountId)
+                        .cancelledEmail(cancelledEmail)
+                        .reason("USER_CANCELLED")
+                        .build()
+        );
+        log.info("Email change cancelled: accountId={}, cancelledEmail={}", accountId, cancelledEmail);
+    }
+
+    /**
+     * Resend email change verification (token còn hạn → gửi lại, hết hạn → tạo token mới)
+     * Theo đúng pattern resendVerificationEmail() hiện tại
+     */
+    @Transactional
+    public EmailChangeResponse resendEmailChangeVerification (UUID accountId) {
+        log.info("Resending email change verification: accountId={}", accountId);
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Account not found: " + accountId));
+
+        if (!account.hasEmailChangePending()) {
+            throw new IllegalStateException("No pending email change request found");
+        }
+
+        // Tạo token mới nếu đã expired
+        if (account.isEmailChangeTokenExpired()) {
+            account.requestEmailChange(
+                    account.getPendingEmail(),
+                    UUID.randomUUID().toString(),
+                    ZonedDateTime.now().plusHours(24)
+            );
+            accountRepository.save(account);
+        }
+
+        emailService.sendEmailChangeVerification(
+                account.getPendingEmail(),
+                account.getEmailChangeToken(),
+                account.getEmail()
+        );
+
+
+        log.info("Email change verification resent to: {}", account.getPendingEmail());
+
+        return EmailChangeResponse.builder()
+                .message("Verification email resent to " + account.getPendingEmail())
+                .pendingEmail(account.getPendingEmail())
+                .expiredAt(account.getEmailChangeExpiredAt())
+                .build();
     }
 }
