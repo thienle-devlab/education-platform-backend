@@ -70,6 +70,55 @@ services:
       retries: 5
 
   # ============================================
+  # COURSE DATABASE
+  # ============================================
+  course-db:
+    image: postgres:15-alpine
+    container_name: education-course-db
+    environment:
+      POSTGRES_DB: ${COURSE_DB_NAME:-course_db}
+      POSTGRES_USER: ${COURSE_DB_USERNAME:-course_user}
+      POSTGRES_PASSWORD: ${COURSE_DB_PASSWORD:-course_password_dev_only}
+    ports:
+      - "${COURSE_DB_PORT:-5434}:5432"
+    volumes:
+      - course-db-data:/var/lib/postgresql/data
+      - ./init-scripts/course-db:/docker-entrypoint-initdb.d
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${COURSE_DB_USERNAME:-course_user} -d ${COURSE_DB_NAME:-course_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # MINIO - File Storage (local dev)
+  # ============================================
+  minio:
+    image: minio/minio:latest
+    container_name: education-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"       # API port
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web UI port
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    networks:
+      - education-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - with-minio
+      - full-stack
+
+  # ============================================
   # PGADMIN - Always available
   # ============================================
   pgadmin:
@@ -89,6 +138,8 @@ services:
       auth-db:
         condition: service_healthy
       user-db:
+        condition: service_healthy
+      course-db:
         condition: service_healthy
 
   # ============================================
@@ -312,6 +363,71 @@ services:
       - full-stack
 
   # ============================================
+  # COURSE SERVICE
+  # ============================================
+  course-service:
+    build:
+      context: .
+      dockerfile: course-service/Dockerfile
+    container_name: education-course-service
+    ports:
+      - "${COURSE_SERVICE_PORT:-8083}:8083"
+    environment:
+      # Spring Profile
+      SPRING_PROFILES_ACTIVE: docker
+
+      # Database
+      COURSE_DB_HOST: course-db
+      COURSE_DB_PORT: 5432
+      COURSE_DB_NAME: ${COURSE_DB_NAME:-course_db}
+      COURSE_DB_USERNAME: ${COURSE_DB_USERNAME:-course_user}
+      COURSE_DB_PASSWORD: ${COURSE_DB_PASSWORD:-course_password_dev_only}
+
+      # Server
+      SERVER_PORT: 8083
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+
+      # Kafka
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      COURSE_KAFKA_CONSUMER_GROUP: ${COURSE_KAFKA_CONSUMER_GROUP:-course-service-group}
+
+      # MinIO
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+
+      # Cloudflare R2 (để trống khi dev)
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_ACCESS_KEY: ${CLOUDFLARE_ACCESS_KEY:-}
+      CLOUDFLARE_SECRET_KEY: ${CLOUDFLARE_SECRET_KEY:-}
+      CLOUDFLARE_BUCKET: ${CLOUDFLARE_BUCKET:-course-content}
+      CLOUDFLARE_PUBLIC_URL: ${CLOUDFLARE_PUBLIC_URL:-}
+
+      # CORS
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-DEBUG}
+      SQL_LOG_LEVEL: ${SQL_LOG_LEVEL:-DEBUG}
+
+    depends_on:
+      course-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - education-network
+    restart: unless-stopped
+    profiles:
+      - full-stack
+
+  # ============================================
   # GATEWAY (Optional - with full-stack profile)
   # ============================================
   gateway:
@@ -330,6 +446,7 @@ services:
       # Service URLs (use container names in Docker)
       AUTH_SERVICE_URL: http://auth-service:8081
       USER_SERVICE_URL: http://user-service:8082
+      COURSE_SERVICE_URL: http://course-service:8083
 
       # CORS
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
@@ -343,6 +460,7 @@ services:
     depends_on:
       - auth-service
       - user-service
+      - course-service
     networks:
       - education-network
     restart: unless-stopped
@@ -356,6 +474,10 @@ volumes:
   auth-db-data:
     driver: local
   user-db-data:
+    driver: local
+  course-db-data:
+    driver: local
+  minio-data:
     driver: local
   pgadmin-data:
     driver: local
