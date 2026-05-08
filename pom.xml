@@ -44,6 +44,7 @@
         <module>common-lib</module>
         <module>auth-service</module>
         <module>user-service</module>
+        <module>course-service</module>
         <module>gateway</module>
     </modules>
 
@@ -151,6 +152,27 @@
                 <artifactId>postgresql</artifactId>
                 <version>42.7.3</version>
                 <scope>runtime</scope>
+            </dependency>
+
+            <!-- MinIO — upload file (video, audio, thumbnail) -->
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>8.5.7</version>
+            </dependency>
+
+            <!-- OkHttp — MinIO client cần, tránh conflict -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>4.12.0</version>
+            </dependency>
+
+            <!-- Cloudflare R2 dùng AWS S3 SDK (R2 tương thích S3 API) -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>s3</artifactId>
+                <version>2.25.6</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
