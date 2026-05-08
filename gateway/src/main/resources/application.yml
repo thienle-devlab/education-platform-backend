@@ -60,6 +60,16 @@ spring:
 #          filters:
 #            - RewritePath=/api/users/(?<segment>.*), /api/user/$\{segment}
 
+        - id: course-service-swagger
+          uri: ${COURSE_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/courses/v3/api-docs
+
+        - id: course-service
+          uri: ${COURSE_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/courses/**
+
 # ============================================
 # SPRINGDOC / SWAGGER CONFIGURATION
 # ============================================
@@ -72,6 +82,8 @@ springdoc:
         url: /api/auth/v3/api-docs
       - name: 2. User Service
         url: /api/users/v3/api-docs
+      - name: 3. Course Service
+        url: /api/courses/v3/api-docs
     urls-primary-name: 1. Authentication Service
     display-operation-id: false
     display-request-duration: true
@@ -141,6 +153,16 @@ spring:
           predicates:
             - Path=/api/users/**
 
+        - id: course-service-swagger
+          uri: http://course-service:8083
+          predicates:
+            - Path=/api/courses/v3/api-docs
+
+        - id: course-service
+          uri: http://course-service:8083
+          predicates:
+            - Path=/api/courses/**
+
 server:
   port: 8080
 
@@ -199,6 +221,16 @@ spring:
           uri: ${USER_SERVICE_URL}
           predicates:
             - Path=/api/users/**
+
+        - id: course-service-swagger
+          uri: ${COURSE_SERVICE_URL}
+          predicates:
+            - Path=/api/courses/v3/api-docs
+
+        - id: course-service
+          uri: ${COURSE_SERVICE_URL}
+          predicates:
+            - Path=/api/courses/**
 
 logging:
   level:

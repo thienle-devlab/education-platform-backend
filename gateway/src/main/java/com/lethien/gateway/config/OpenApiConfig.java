@@ -85,6 +85,14 @@ public class OpenApiConfig {
                 .build();
     }
 
+    @Bean
+    public GroupedOpenApi courseServiceApi() {
+        return GroupedOpenApi.builder()
+                .group("3. Course Service")
+                .pathsToMatch("/api/courses/**")
+                .build();
+    }
+
     /**
      * Gateway routes (metadata only, not API endpoints)
      */
