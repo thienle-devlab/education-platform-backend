@@ -7,6 +7,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.ZonedDateTime;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Exercise entity — bài tập thực hành cho 4 kỹ năng (10 loại exercise_type)
@@ -33,10 +34,15 @@ public class Exercise {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", updatable = false)
+    @Column(name = "id", updatable = false, nullable = false)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lesson_id", nullable = false)
     private Lesson lesson;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "exercise_type", nullable = false,
             columnDefinition = "exercise_type")
     private ExerciseType exerciseType;
