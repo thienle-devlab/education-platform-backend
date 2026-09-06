@@ -89,6 +89,7 @@ public class WritingSubmission {
     private Map<String, Object> feedbackJson;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false,
             columnDefinition = "submission_status")
     @Builder.Default

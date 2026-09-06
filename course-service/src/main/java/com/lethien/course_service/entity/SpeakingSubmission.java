@@ -38,6 +38,9 @@ public class SpeakingSubmission {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "exercise_id", nullable = false)
     private Exercise exercise;
@@ -75,6 +78,7 @@ public class SpeakingSubmission {
     private Map<String, Object> feedbackJson;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false,
             columnDefinition = "submission_status")
     @Builder.Default
