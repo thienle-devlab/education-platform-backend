@@ -2,6 +2,8 @@ package com.lethien.course_service.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -47,6 +49,7 @@ public class Enrollment {
     private Course course;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false,
             columnDefinition = "enrollment_status")
     @Builder.Default

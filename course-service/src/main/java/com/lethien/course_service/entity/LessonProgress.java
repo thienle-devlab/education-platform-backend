@@ -2,6 +2,8 @@ package com.lethien.course_service.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -45,6 +47,7 @@ public class LessonProgress {
     private Lesson lesson;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false, columnDefinition = "progress_status")
     @Builder.Default
     private  ProgressStatus status = ProgressStatus.NOT_STARTED;

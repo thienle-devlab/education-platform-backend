@@ -43,6 +43,7 @@ public class SkillContent {
     private Lesson lesson;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "skill_type", nullable = false,
             columnDefinition = "skill_type")
     private SkillType skillType;

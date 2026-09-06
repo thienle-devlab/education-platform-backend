@@ -2,6 +2,8 @@ package com.lethien.course_service.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -54,16 +56,19 @@ public class Course {
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "skill_type", nullable = false, columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "skill_type", nullable = false, columnDefinition = "skill_type")
     private SkillType skillType;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode((SqlTypes.NAMED_ENUM))
     @Column(name = "level", nullable = false,
             columnDefinition = "course_level")
     @Builder.Default
     private CourseLevel level = CourseLevel.BEGINNER;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false,
             columnDefinition = "course_status")
     @Builder.Default
