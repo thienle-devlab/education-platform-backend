@@ -61,8 +61,7 @@ spring:
         spring.json.trusted.packages: "com.lethien.common_lib.event"
         spring.json.use.type.headers: true
         spring.json.type.mapping: >
-          ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent,
-          EMAIL_CHANGE_CONFIRMED:com.lethien.common_lib.event.EmailChangeConfirmedEvent
+          SUBMISSION_GRADED:com.lethien.common_lib.event.SubmissionGradedEvent
           
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -73,13 +72,13 @@ spring:
       linger-ms: 5
       buffer-memory: 33554432
       properties:
-        enable.idempotence: true
-        max.in.flight.requests.per.connection: 5
-        request.timeout.ms: 30000
+#        enable.idempotence: true
+#        max.in.flight.requests.per.connection: 5
+#        request.timeout.ms: 30000
         spring.json.add.type.headers: true
-        spring.json.type.mapping: >
-          ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent,
-          EMAIL_CHANGE_CONFIRMED:com.lethien.common_lib.event.EmailChangeConfirmedEvent
+#        spring.json.type.mapping: >
+#          ACCOUNT_CREATED:com.lethien.common_lib.event.AccountCreatedEvent,
+#          EMAIL_CHANGE_CONFIRMED:com.lethien.common_lib.event.EmailChangeConfirmedEvent
           
 # ============================================
 # CUSTOM KAFKA PROPERTIES
@@ -153,7 +152,9 @@ logging:
 # ============================================
 jwt:
   secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:900000}
+  expiration: ${JWT_EXPIRATION:3600000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+#  expiration: ${JWT_EXPIRATION:900000}
 
 # ============================================
 # ACTUATOR CONFIGURATION
