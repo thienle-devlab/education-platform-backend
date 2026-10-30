@@ -21,7 +21,6 @@ import java.util.UUID;
 @Builder
 public class UpdateCourseRequest {
 
-    @NotNull(message = "Instructor ID is required for ownership verification")
     private UUID instructorId;
 
     @Size(max = 255, message = "Title must not exceed 255 characters")

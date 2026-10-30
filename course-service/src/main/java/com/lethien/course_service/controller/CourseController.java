@@ -3,12 +3,13 @@ package com.lethien.course_service.controller;
 import com.lethien.common_lib.dto.ApiResponse;
 import com.lethien.common_lib.dto.PageResponse;
 import com.lethien.common_lib.security.JwtService;
-import com.lethien.course_service.dto.CourseResponse;
-import com.lethien.course_service.dto.CourseSummaryResponse;
-import com.lethien.course_service.dto.CreateCourseRequest;
-import com.lethien.course_service.dto.UpdateCourseRequest;
+import com.lethien.course_service.client.InternalUserResponse;
+import com.lethien.course_service.client.UserServiceClient;
+import com.lethien.course_service.dto.*;
 import com.lethien.course_service.entity.CourseLevel;
+import com.lethien.course_service.entity.EnrollmentStatus;
 import com.lethien.course_service.entity.SkillType;
+import com.lethien.course_service.exception.CourseAccessDeniedException;
 import com.lethien.course_service.service.CourseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -54,6 +56,7 @@ public class CourseController {
 
     private final CourseService courseService;
     private final JwtService jwtService;
+    private final UserServiceClient userServiceClient;
 
     // ============================================
     // PUBLIC — GET /courses (catalog)
@@ -139,8 +142,11 @@ public class CourseController {
         UUID accountId = extractAccountId(httpRequest);
         log.info("POST /courses - accountId={}", accountId);
 
-        // instructorId must be set in request by the client (userId from User Service)
-        // TODO: validate that accountId matches request.instructorId via UserServiceClient
+        // Resolve userId + verify instructor role
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
+        // Override instructorId từ server — client không được tự set
+        request.setInstructorId(user.getUserId());
 
         CourseResponse response = courseService.createCourse(request);
 
@@ -169,7 +175,9 @@ public class CourseController {
         UUID accountId = extractAccountId(httpRequest);
         log.info("PATCH /courses/{} - accountId={}", id, accountId);
 
-        CourseResponse response = courseService.updateCourse(id, accountId, request);
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
+        CourseResponse response = courseService.updateCourse(id, user.getUserId(), request);
 
         return ResponseEntity.ok(ApiResponse.success("Course updated successfully", response));
     }
@@ -182,13 +190,14 @@ public class CourseController {
     @PostMapping("/{id}/publish")
     public ResponseEntity<ApiResponse<CourseResponse>> publishCourse(
             @PathVariable UUID id,
-            @RequestParam UUID instructorId,
             HttpServletRequest httpRequest
     ) {
         UUID accountId = extractAccountId(httpRequest);
         log.info("POST /courses/{}/publish - accountId={}", id, accountId);
 
-        CourseResponse response = courseService.publishCourse(id, instructorId);
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
+        CourseResponse response = courseService.publishCourse(id, user.getUserId());
 
         return ResponseEntity.ok(ApiResponse.success("Course published successfully", response));
     }
@@ -201,13 +210,14 @@ public class CourseController {
     @PostMapping("/{id}/archive")
     public ResponseEntity<ApiResponse<CourseResponse>> archiveCourse(
             @PathVariable UUID id,
-            @RequestParam UUID instructorId,
             HttpServletRequest httpRequest
     ) {
         UUID accountId = extractAccountId(httpRequest);
         log.info("POST /courses/{}/archive - accountId={}", id, accountId);
 
-        CourseResponse response = courseService.archiveCourse(id, instructorId);
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
+        CourseResponse response = courseService.archiveCourse(id, user.getUserId());
 
         return ResponseEntity.ok(ApiResponse.success("Course archived successfully", response));
     }
@@ -220,19 +230,15 @@ public class CourseController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteCourse(
             @PathVariable UUID id,
-            @RequestParam UUID instructorId,
             HttpServletRequest httpRequest
     ) {
-        // TODO [STEP-5 Inter-service]: accountId từ JWT cần được map sang userId
-        // thông qua UserServiceClient.getUserIdByAccountId(accountId) trước khi
-        // truyền vào courseService để verify ownership.
-        // Hiện tại tạm dùng instructorId từ @RequestParam — không an toàn vì client
-        // có thể giả mạo. Sẽ bỏ @RequestParam instructorId sau khi có UserServiceClient
 
         UUID accountId = extractAccountId(httpRequest);
         log.info("DELETE /courses/{} - accountId={}", id, accountId);
 
-        courseService.deleteCourse(id, instructorId);
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
+        courseService.deleteCourse(id, user.getUserId());
 
         return ResponseEntity.ok(ApiResponse.success("Course deleted successfully"));
     }
@@ -257,10 +263,12 @@ public class CourseController {
         UUID accountId = extractAccountId(httpRequest);
         log.info("GET /courses/instructor/me - accountId={}", accountId);
 
+        InternalUserResponse user = userServiceClient.getUserByAccountId(accountId);
+
         // Tạm thời dùng accountId như instructorId cho đến khi có UserServiceClient
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         PageResponse<CourseSummaryResponse> response =
-                courseService.getCoursesByInstructor(accountId, pageable);
+                courseService.getCoursesByInstructor(user.getUserId(), pageable);
 
         return ResponseEntity.ok(ApiResponse.success("Instructor courses retrieved", response));
     }
