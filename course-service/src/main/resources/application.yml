@@ -185,6 +185,20 @@ springdoc:
     enabled: true
   show-actuator: false
 
+# ============================================
+# INTERNAL API KEY
+# ============================================
+internal:
+  api-key: ${INTERNAL_API_KEY:5a8d84d30bbcf08a0a1d81c1005e0f98fd6f59f797f03c2df977767ca84683dd}
+
+# ============================================
+# INTER-SERVICE URLs
+# ============================================
+services:
+  user-service:
+    url: ${USER_SERVICE_URL:http://localhost:8082}
+    context-path: /api/users
+
 ---
 # ============================================
 # DOCKER PROFILE
@@ -214,6 +228,11 @@ logging:
   level:
     root: INFO
     com.lethien.course_service: INFO
+
+services:
+  user-service:
+    url: ${USER_SERVICE_URL:http://user-service:8082}
+    context-path: /api/users
 
 ---
 # ============================================
@@ -247,3 +266,16 @@ logging:
     com.lethien.course_service: INFO
   file:
     name: /var/log/course-service/application.log
+
+# ============================================
+# INTERNAL API KEY — inter-service authentication
+# ============================================
+#internal:
+#  api-key: ${INTERNAL_API_KEY:5a8d84d30bbcf08a0a1d81c1005e0f98fd6f59f797f03c2df977767ca84683dd}
+
+# ============================================
+# INTER-SERVICE URLs
+# ============================================
+#services:
+#  user-service:
+#    url: http://localhost:8082/api/users
