@@ -17,20 +17,22 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * JwtAuthenticationFilter — intercepts every request and validates JWT.
+ * JwtAuthenticationFilter — validate JWT và set authorities từ roles trong token.
  *
- * Flow:
- *   1. Extract Bearer token from Authorization header
- *   2. Validate token signature + expiry using shared secret
- *   3. Extract accountId + email from claims
- *   4. Set Authentication in SecurityContext
- *   5. Continue filter chain
+ * Thay đổi so với version cũ:
+ *   + Extract roles từ JWT claim "roles"
+ *   + Map roles → Spring Security authorities (ROLE_STUDENT, ROLE_INSTRUCTOR...)
+ *   + Nếu JWT không có roles → fallback ROLE_USER (backward compatible)
  *
- * User Service does NOT call Auth Service to verify —
- * verification is done locally with the shared secret key.
+ * Sau khi filter này chạy, các endpoint có thể dùng:
+ *   @PreAuthorize("hasRole('INSTRUCTOR')")
+ *   @PreAuthorize("hasRole('ADMIN')")
+ *   SecurityContextHolder.getContext().getAuthentication().getAuthorities()
  */
 @Component
 @RequiredArgsConstructor
@@ -52,11 +54,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UUID accountId = jwtService.getAccountIdFromToken(token);
                 String email = jwtService.getEmailFromToken(token);
 
-                // User Service has no roles in JWT currently —
-                // roles are managed locally in user_db.
-                // Using ROLE_USER as a base authority for all authenticated users.
-                List<SimpleGrantedAuthority> authorities =
-                        List.of(new SimpleGrantedAuthority("ROLE_USER"));
+                // Extract roles từ JWT — Set<String> ["STUDENT", "INSTRUCTOR"...]
+                Set<String> roles = jwtService.getRolesFromToken(token);
+
+                // Map roles → Spring Security GrantedAuthority với prefix ROLE_
+                List<SimpleGrantedAuthority> authorities;
+
+                if (roles.isEmpty()) {
+                    // Backward compatible: JWT cũ không có roles → ROLE_USER
+                    authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
+                    log.debug("JWT has no roles claim — using ROLE_USER fallback: accountId={}",
+                            accountId);
+                } else {
+                    authorities = roles.stream()
+                            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                            .collect(Collectors.toList());
+                    log.debug("JWT authenticated: accountId={}, roles={}", accountId, roles);
+                }
 
                 // Build authentication with accountId as principal
                 // Controllers can access accountId via:
@@ -70,7 +84,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
 
-                log.debug("JWT authenticated: accountId={}, email={}", accountId, email);
             } catch (Exception e) {
                 log.error("Failed to set authentication from JWT: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
