@@ -15,7 +15,7 @@ import java.util.UUID;
 @Repository
 public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
-    List<Section> findAllBySectionIdOrderByOrderIndexAsc(UUID sectionId);
+    List<Lesson> findAllBySectionIdOrderByOrderIndexAsc(UUID sectionId);
 
     List<Lesson> findAllBySectionIdAndLessonType(UUID sectionId, LessonType lessonType);
 
