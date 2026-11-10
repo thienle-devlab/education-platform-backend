@@ -7,6 +7,15 @@ import lombok.*;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
+/**
+ * LessonResponse — một DTO, hai chế độ:
+ *
+ *   from(lesson)                  → đầy đủ (dùng cho instructor khi tạo/sửa lesson)
+ *   from(lesson, includeContent)  → includeContent = false thì ẩn contentUrl và skillContent
+ *                                   (mediaUrl, transcript, contentData) và đặt contentLocked = true
+ *
+ * contentLocked cho frontend biết hiển thị biểu tượng khóa thay vì coi như lesson trống.
+ */
 @Setter
 @Getter
 @NoArgsConstructor
@@ -21,19 +30,26 @@ public class LessonResponse {
     private LessonType lessonType;
     private Integer orderIndex;
     private Integer durationSeconds;
-    private String contentUrl;
     private Boolean isPreview;
     private Boolean isFree;
 
-    // null nếu lesson chưa có SkillContent
+    // --- nội dung: null khi bị khóa ---
+    private String contentUrl;
     private SkillContentResponse skillContent;
+
+    private Boolean contentLocked;
 
     private ZonedDateTime createdAt;
     private ZonedDateTime updatedAt;
 
     public static LessonResponse from(Lesson lesson) {
+        return from(lesson, true);
+    }
+
+    public static LessonResponse from(Lesson lesson, boolean includeContent) {
+        // Khi khóa, không đụng tới lesson.getSkillContent() để khỏi phát sinh query thừa
         SkillContentResponse skillContentResponse = null;
-        if (lesson.getSkillContent() != null) {
+        if (includeContent && lesson.getSkillContent() != null) {
             skillContentResponse = SkillContentResponse.from(lesson.getSkillContent());
         }
 
@@ -45,10 +61,11 @@ public class LessonResponse {
                 .lessonType(lesson.getLessonType())
                 .orderIndex(lesson.getOrderIndex())
                 .durationSeconds(lesson.getDurationSeconds())
-                .contentUrl(lesson.getContentUrl())
                 .isPreview(lesson.getIsPreview())
                 .isFree(lesson.getIsFree())
+                .contentUrl(includeContent ? lesson.getContentUrl() : null)
                 .skillContent(skillContentResponse)
+                .contentLocked(!includeContent)
                 .createdAt(lesson.getCreatedAt())
                 .updatedAt(lesson.getUpdatedAt())
                 .build();

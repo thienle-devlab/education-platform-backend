@@ -13,10 +13,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.lethien.course_service.service.CourseAccessService.ViewerAccess;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +31,7 @@ public class LessonService {
     private final EnrollmentRepository enrollmentRepository;
     private final CourseService courseService;
     private final SectionService sectionService;
+    private final CourseAccessService courseAccessService;
     private final EntityManager entityManager;
 
     // ============================================
@@ -68,8 +72,8 @@ public class LessonService {
         // Tạo SkillContent cùng lúc nếu có
         if (request.getSkillContent() != null) {
             createSkillContent(saved, request.getSkillContent());
-            // Refresh để load skillContent vừa tạo
-            entityManager.refresh(saved);
+
+            saved = lessonRepository.saveAndFlush(saved);
         }
 
         log.info("Lesson created: lessonId={}, orderIndex={}", saved.getId(), nextOrder);
@@ -81,18 +85,20 @@ public class LessonService {
     // ============================================
 
     /**
-     * Lấy danh sách lessons trong section — sorted by orderIndex.
+     * Lấy danh sách lessons trong section.
+     * Nội dung của lesson bị khóa với người xem PUBLIC (trừ lesson preview).
      */
     @Transactional(readOnly = true)
-    public List<LessonResponse> getLessonsBySection(UUID sectionId) {
+    public List<LessonResponse> getLessonsBySection(UUID sectionId, UUID viewerUserId) {
         log.info("Getting lessons: sectionId={}", sectionId);
 
-        sectionService.findSectionById(sectionId);
+        Section section = sectionService.findSectionById(sectionId);
+        ViewerAccess access = courseAccessService.resolveForReading(section.getCourse(), viewerUserId);
 
         return lessonRepository
                 .findAllBySectionIdOrderByOrderIndexAsc(sectionId)
                 .stream()
-                .map(LessonResponse::from)
+                .map(l -> LessonResponse.from(l, canSeeContent(access, l)))
                 .toList();
     }
 
@@ -101,15 +107,18 @@ public class LessonService {
      * Used in: GET /courses/{id}/curriculum
      */
     @Transactional(readOnly = true)
-    public CurriculumResponse getCurriculum(UUID courseId) {
+    public CurriculumResponse getCurriculum(UUID courseId, UUID viewerUserId) {
         log.info("Getting curriculum: courseId={}", courseId);
 
         Course course = courseService.findCourseById(courseId);
+        ViewerAccess access = courseAccessService.resolveForReading(course, viewerUserId);
+        boolean fullAccess = access.canViewAllContent();
 
-        List<Section> sections = sectionRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
+        List<Section> sections =
+                sectionRepository.findAllByCourseIdOrderByOrderIndexAsc(courseId);
 
         List<CurriculumResponse.SectionWithLessons> sectionWithLessons = sections.stream()
-                .map(CurriculumResponse.SectionWithLessons::from)
+                .map(s -> CurriculumResponse.SectionWithLessons.from(s, fullAccess))
                 .toList();
 
         int totalLessons = sectionWithLessons.stream()
@@ -119,6 +128,7 @@ public class LessonService {
         return CurriculumResponse.builder()
                 .courseId(courseId)
                 .courseTitle(course.getTitle())
+                .viewerAccess(access.name())
                 .totalSections(sections.size())
                 .totalLessons(totalLessons)
                 .sections(sectionWithLessons)
@@ -127,10 +137,15 @@ public class LessonService {
 
     /**
      * Lấy detail 1 lesson theo ID.
+     * Lesson bị khóa vẫn trả 200 (kèm contentLocked = true, không có contentUrl/skillContent).
      */
     @Transactional(readOnly = true)
-    public LessonResponse getLessonById(UUID lessonId) {
-        return LessonResponse.from(findLessonById(lessonId));
+    public LessonResponse getLessonById(UUID lessonId, UUID viewerUserId) {
+        Lesson lesson = findLessonById(lessonId);
+        ViewerAccess access = courseAccessService.resolveForReading(
+                lesson.getSection().getCourse(), viewerUserId);
+
+        return LessonResponse.from(lesson, canSeeContent(access, lesson));
     }
 
     // ============================================
@@ -182,10 +197,9 @@ public class LessonService {
         } else {
             // Create new
             createSkillContent(lesson, request);
-            entityManager.refresh(lesson);
         }
 
-        Lesson updated = lessonRepository.save(lesson);
+        Lesson updated = lessonRepository.saveAndFlush(lesson);
         log.info("SkillContent upserted: lessonId={}", lessonId);
 
         return LessonResponse.from(updated);
@@ -214,6 +228,10 @@ public class LessonService {
                             + ", got " + request.getLessonIds().size());
         }
 
+        if (new HashSet<>(request.getLessonIds()).size() != request.getLessonIds().size()) {
+            throw new IllegalArgumentException("sectionIds contains duplicates");
+        }
+
         List<UUID> existingIds = lessons.stream().map(Lesson::getId).toList();
 
         for (UUID id : request.getLessonIds()) {
@@ -223,14 +241,21 @@ public class LessonService {
             }
         }
 
-        for (int i = 0; i < request.getLessonIds().size(); i ++) {
-            UUID lessonId = request.getLessonIds().get(i);
-            Lesson lesson = lessons.stream()
-                    .filter(l -> l.getId().equals(lessonId))
-                    .findFirst().orElseThrow();
-            lesson.setOrderIndex(i);
-            lessonRepository.save(lesson);
+        // Pha 1: dời tạm tất cả ra ngoài vùng 0..n-1 để không bị trùng khi đổi chỗ
+        int offset = lessons.stream().mapToInt(Lesson::getOrderIndex).max().orElse(0)
+                + lessons.size() + 1;
+        for (Lesson l : lessons) {
+            l.setOrderIndex(l.getOrderIndex() + offset);
         }
+        lessonRepository.saveAllAndFlush(lessons);
+
+// Pha 2: gán thứ tự cuối cùng 0..n-1
+        Map<UUID, Lesson> byId = lessons.stream()
+                .collect(Collectors.toMap(Lesson::getId, l -> l));
+        for (int i = 0; i < request.getLessonIds().size(); i++) {
+            byId.get(request.getLessonIds().get(i)).setOrderIndex(i);
+        }
+        lessonRepository.saveAllAndFlush(lessons);
 
         log.info("Lessons reordered: sectionId={}", sectionId);
 
@@ -294,6 +319,10 @@ public class LessonService {
                         ? request.getContentData() : Map.of())
                 .build();
         lesson.setSkillContent(sc);
+    }
+
+    private boolean canSeeContent(ViewerAccess access, Lesson lesson) {
+        return access.canViewAllContent() || Boolean.TRUE.equals(lesson.getIsPreview());
     }
 
     private void verifyOwnership(Course course, UUID instructorId) {

@@ -9,6 +9,9 @@ import java.util.UUID;
 /**
  * CurriculumResponse — toàn bộ cấu trúc course.
  * Used in: GET /courses/{id}/curriculum
+ *
+ * viewerAccess (OWNER | ENROLLED | PUBLIC) cho frontend biết người xem đang ở mức nào,
+ * ví dụ để hiện nút "Đăng ký học" khi là PUBLIC.
  */
 @Getter
 @Setter
@@ -19,6 +22,7 @@ public class CurriculumResponse {
 
     private UUID courseId;
     private String courseTitle;
+    private String viewerAccess;
     private Integer totalSections;
     private Integer totalLessons;
     private List<SectionWithLessons> sections;
@@ -36,9 +40,15 @@ public class CurriculumResponse {
         private Integer totalLessons;
         private List<LessonResponse> lessons;
 
-        public static SectionWithLessons from(Section section) {
+        /**
+         * @param fullAccess true (OWNER/ENROLLED) → mọi lesson đầy đủ nội dung;
+         *                   false (PUBLIC) → chỉ lesson isPreview mới có nội dung.
+         */
+
+        public static SectionWithLessons from(Section section, boolean fullAccess) {
             List<LessonResponse> lessons = section.getLessons().stream()
-                    .map(LessonResponse::from)
+                    .map(l -> LessonResponse.from(l,
+                            fullAccess || Boolean.TRUE.equals(l.getIsPreview())))
                     .toList();
 
             return SectionWithLessons.builder()

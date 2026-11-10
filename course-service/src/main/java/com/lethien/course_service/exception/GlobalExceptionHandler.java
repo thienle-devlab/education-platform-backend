@@ -5,11 +5,14 @@ import com.lethien.common_lib.dto.ErrorDetails;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -242,6 +245,45 @@ public class GlobalExceptionHandler {
         errorDetails.setPath(extractPath(request));
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(404, ex.getMessage(), errorDetails));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(
+            HttpMessageNotReadableException ex, WebRequest request) {
+
+        log.warn("Unreadable request body: {}", ex.getMostSpecificCause().getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of(
+                "MALFORMED_REQUEST", "Request body is malformed or contains an invalid value");
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, "Malformed request body", errorDetails));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, WebRequest request) {
+
+        String message = "Invalid value for parameter '" + ex.getName() + "'";
+        log.warn("Type mismatch: {}", message);
+
+        ErrorDetails errorDetails = ErrorDetails.of("INVALID_PARAMETER", message);
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, message, errorDetails));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(
+            NoResourceFoundException ex, WebRequest request) {
+
+        ErrorDetails errorDetails = ErrorDetails.of("NOT_FOUND", "Endpoint not found");
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, "Endpoint not found", errorDetails));
     }
 
     // ============================================

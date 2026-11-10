@@ -17,8 +17,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -145,6 +148,10 @@ public class SectionService {
             );
         }
 
+        if (new HashSet<>(request.getSectionIds()).size() != request.getSectionIds().size()) {
+            throw new IllegalArgumentException("sectionIds contains duplicates");
+        }
+
         // Validate: tất cả sectionId phải thuộc course này
         List<UUID> existingIds = sections.stream()
                 .map(Section::getId).toList();
@@ -155,16 +162,21 @@ public class SectionService {
             }
         }
 
-        // Áp dụng thứ tự mới
-        for (int i = 0; i < request.getSectionIds().size(); i ++) {
-            UUID sectionId = request.getSectionIds().get(i);
-            Section section = sections.stream()
-                    .filter(s -> s.getId().equals(sectionId))
-                    .findFirst()
-                    .orElseThrow();
-            section.setOrderIndex(i);
-            sectionRepository.save(section);
+        // Pha 1: dời tạm tất cả ra ngoài vùng 0..n-1 để không bị trùng khi đổi chỗ
+        int offset = sections.stream().mapToInt(Section::getOrderIndex).max().orElse(0)
+                + sections.size() + 1;
+        for (Section s : sections) {
+            s.setOrderIndex(s.getOrderIndex() + offset);
         }
+        sectionRepository.saveAllAndFlush(sections);
+
+        // Pha 2: gán thứ tự cuối cùng 0..n-1
+        Map<UUID, Section> byId = sections.stream()
+                .collect(Collectors.toMap(Section::getId, s -> s));
+        for (int i = 0; i < request.getSectionIds().size(); i++) {
+            byId.get(request.getSectionIds().get(i)).setOrderIndex(i);
+        }
+        sectionRepository.saveAllAndFlush(sections);
 
         log.info("Sections reordered: courseId={}", courseId);
 
