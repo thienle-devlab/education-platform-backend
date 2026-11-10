@@ -256,6 +256,10 @@ services:
     environment:
       # Spring Profile
       SPRING_PROFILES_ACTIVE: docker
+
+      # Internal api key
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-education-internal-secret-2026}
+      USER_SERVICE_URL: http://user-service:8082
       
       # Database
       AUTH_DB_HOST: auth-db
@@ -330,6 +334,9 @@ services:
       USER_DB_USERNAME: ${USER_DB_USERNAME:-user_user}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD}
 
+      # Internal api key
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-5a8d84d30bbcf08a0a1d81c1005e0f98fd6f59f797f03c2df977767ca84683dd}
+
 #      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/user_db
 #      SPRING_DATASOURCE_USERNAME: user_user
 #      SPRING_DATASOURCE_PASSWORD: user_password_dev_only
@@ -382,6 +389,10 @@ services:
       COURSE_DB_NAME: ${COURSE_DB_NAME:-course_db}
       COURSE_DB_USERNAME: ${COURSE_DB_USERNAME:-course_user}
       COURSE_DB_PASSWORD: ${COURSE_DB_PASSWORD:-course_password_dev_only}
+
+      # Internal api key
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-5a8d84d30bbcf08a0a1d81c1005e0f98fd6f59f797f03c2df977767ca84683dd}
+      USER_SERVICE_URL: http://user-service:8082
 
       # Server
       SERVER_PORT: 8083

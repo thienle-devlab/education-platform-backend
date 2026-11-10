@@ -10,10 +10,12 @@ import com.lethien.course_service.entity.CourseLevel;
 import com.lethien.course_service.entity.SkillType;
 import com.lethien.course_service.exception.*;
 import com.lethien.course_service.repository.CourseRepository;
+import com.lethien.course_service.repository.CourseSpecifications;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -129,7 +131,13 @@ public class CourseService {
         log.info("Getting published courses: skillType={}, level={}, maxPrice={}",
                 skillType, level, maxPrice);
 
-        Page<Course> page = courseRepository.findPublished(skillType, level, maxPrice, pageable);
+        Specification<Course> spec = Specification
+                .where(CourseSpecifications.published())
+                .and(CourseSpecifications.hasSkillType(skillType))
+                .and(CourseSpecifications.hasLevel(level))
+                .and(CourseSpecifications.priceAtMost(maxPrice));
+
+        Page<Course> page = courseRepository.findAll(spec, pageable);
 
         Page<CourseSummaryResponse> mapped = page.map(CourseSummaryResponse::from);
 
@@ -178,13 +186,14 @@ public class CourseService {
      * Only the course owner (instructorId) can update.
      *
      * @param courseId  target course
-     * @param accountId accountId from JWT — used to verify ownership
+     * @param instructorId accountId from JWT — used to verify ownership
      * @param request   partial update payload
      */
     @Transactional
-    public CourseResponse updateCourse(UUID courseId, UUID accountId, UpdateCourseRequest request) {
+    public CourseResponse updateCourse(UUID courseId, UUID instructorId, UpdateCourseRequest request) {
 
-        log.info("Updating course: courseId={}, accountId={}", courseId, accountId);
+//        log.info("Updating course: courseId={}, accountId={}", courseId, accountId);
+        log.info("Updating course: courseId={}, instructorId={}", courseId, instructorId);
 
         Course course = findCourseById(courseId);
 
@@ -192,7 +201,9 @@ public class CourseService {
         // NOTE: instructorId = userId from User Service (not accountId from Auth Service)
         // Inter-service call needed here if we want strict check.
         // For now: pass instructorId explicitly in request and verify.
-        verifyOwnership(course, request.getInstructorId());
+
+//        verifyOwnership(course, request.getInstructorId());
+        verifyOwnership(course, instructorId);
 
         // Partial update — only non-null fields
         if (request.getTitle() != null)
@@ -310,10 +321,25 @@ public class CourseService {
     /**
      * Verify that the given instructorId matches the course owner.
      */
+//    private void verifyOwnership(Course course, UUID instructorId) {
+//        if (!course.getInstructorId().equals(instructorId)) {
+//            throw new CourseAccessDeniedException("Access denied: you are not the owner of this course");
+//        }
+//    }
+
     private void verifyOwnership(Course course, UUID instructorId) {
-        if (!course.getInstructorId().equals(instructorId)) {
-            throw new CourseAccessDeniedException("Access denied: you are not the owner of this course");
+        if (instructorId == null
+                || !instructorId.equals(course.getInstructorId())) {
+            throw new CourseAccessDeniedException(
+                    "Access denied: you are not the owner of this course"
+            );
         }
     }
+
+    /**
+     * Provides reusable specifications for filtering courses.
+     * These specifications can be combined dynamically to build course queries.
+     */
+
 
 }

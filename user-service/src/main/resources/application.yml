@@ -206,3 +206,6 @@ logging:
     com.education.user: INFO
   file:
     name: /var/log/user-service/application.log
+
+internal:
+  api-key: ${INTERNAL_API_KEY:5a8d84d30bbcf08a0a1d81c1005e0f98fd6f59f797f03c2df977767ca84683dd}

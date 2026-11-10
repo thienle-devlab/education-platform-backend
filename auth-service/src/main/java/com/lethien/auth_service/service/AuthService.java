@@ -1,5 +1,6 @@
 package com.lethien.auth_service.service;
 
+import com.lethien.auth_service.client.UserServiceClient;
 import com.lethien.auth_service.dto.*;
 import com.lethien.auth_service.entity.*;
 import com.lethien.auth_service.exception.*;
@@ -13,6 +14,7 @@ import com.lethien.common_lib.event.EmailChangeConfirmedEvent;
 import com.lethien.common_lib.event.EmailChangeRequestedEvent;
 import com.lethien.common_lib.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,10 +24,16 @@ import org.springframework.transaction.annotation.Transactional;
 import com.lethien.auth_service.exception.AccountLockedException;
 
 import java.time.ZonedDateTime;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Service for authentication operations
+ * AuthService — xử lý authentication operations.
+ *
+ * Thay đổi so với version cũ:
+ *   + login() gọi UserServiceClient để lấy roles
+ *   + generateAccessToken() truyền roles vào JWT
+ *   + refreshToken() cũng lấy roles mới nhất khi refresh
  */
 @Service
 @RequiredArgsConstructor
@@ -40,6 +48,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final EmailService emailService;
     private final EventPublisherService eventPublisherService;
+    private final UserServiceClient userServiceClient;
 
     // Remember me: 30 days instead of 7 days
     private static final long REMEMBER_ME_REFRESH_EXPIRATION = 30L * 24 * 60 * 60 * 1000; // 30 days
@@ -91,15 +100,21 @@ public class AuthService {
             loginAttemptRepository.save(loginAttempt);
         }
 
-        // 6. Generate JWT tokens
-        String accessToken = jwtService.generateAccessToken(account.getId(), account.getEmail());
+        // 6. Lấy roles từ User Service
+        // Nếu User Service down hoặc chưa tạo profile → dùng Set.of() (empty roles)
+        // User vẫn login được nhưng không có quyền instructor
+        Set<String> roles = fetchUserRoles(account.getId());
+
+        // 7. Generate JWT tokens — truyền roles vào access token
+        String accessToken = jwtService.generateAccessToken(
+                account.getId(), account.getEmail(), roles);
 
         Boolean rememberMe = request.getRememberMe();
         String refreshTokenString = (rememberMe != null && rememberMe)
                 ? jwtService.generateRefreshToken(account.getId(), account.getEmail(), REMEMBER_ME_REFRESH_EXPIRATION)
                 : jwtService.generateRefreshToken(account.getId(), account.getEmail());
 
-        // 7. Save refresh token
+        // 8. Save refresh token
         Long refreshExpiration = (rememberMe != null && rememberMe)
                 ? REMEMBER_ME_REFRESH_EXPIRATION
                 : jwtService.getExpirationTime(refreshTokenString);
@@ -112,7 +127,7 @@ public class AuthService {
                 .build();
         refreshTokenRepository.save(refreshToken);
 
-        // 8. Create login session
+        // 9. Create login session
         LoginSession session = LoginSession.builder()
                 .account(account)
                 .deviceInfo(userAgent)
@@ -121,7 +136,7 @@ public class AuthService {
                 .build();
         loginSessionRepository.save(session);
 
-        log.info("Login successful for email: {}", request.getEmail());
+        log.info("Login successful for email: {}, roles={}", request.getEmail(), roles);
 
         return LoginResponse.builder()
                 .accountId(account.getId())
@@ -133,6 +148,10 @@ public class AuthService {
                 .loginAt(ZonedDateTime.now())
                 .build();
     }
+
+    // ============================================
+    // REFRESH TOKEN
+    // ============================================
 
     @Transactional
     public LoginResponse refreshToken(RefreshTokenRequest request) {
@@ -159,8 +178,13 @@ public class AuthService {
         refreshToken.revoke();  // dùng method revoke() có sẵn giống logout
         refreshTokenRepository.save(refreshToken);
 
+        // Lấy roles mới nhất khi refresh — đảm bảo role thay đổi có hiệu lực
+        // sau tối đa 1 lần refresh (15 phút)
+        Set<String> roles = fetchUserRoles(account.getId());
+
         // ✅ Bước 2: Tạo access token mới
-        String newAccessToken = jwtService.generateAccessToken(account.getId(), account.getEmail());
+        String newAccessToken = jwtService.generateAccessToken(
+                account.getId(), account.getEmail(), roles);
 
 
         // ✅ Bước 3: Tạo refresh token mới
@@ -175,7 +199,7 @@ public class AuthService {
                 .build();
         refreshTokenRepository.save(newRefreshToken);
 
-        log.info("Access token refreshed for email: {}", account.getEmail());
+        log.info("Access token refreshed for email: {}, roles={}", account.getEmail(), roles);
 
         // ✅ Bước 4: Trả về token mới
         return LoginResponse.builder()
@@ -189,9 +213,10 @@ public class AuthService {
                 .build();
     }
 
-    /**
-     * Logout (revoke refresh token)
-     */
+    // ============================================
+    // LOGOUT
+    // ============================================
+
     @Transactional
     public void logout(String refreshTokenString) {
         log.info("Logout attempt");
@@ -223,28 +248,6 @@ public class AuthService {
         int deactivatedSessions = loginSessionRepository.deactivateAllSessionsByAccountId(accountId, now);
 
         log.info("Revoked {} tokens and deactivated {} sessions", revokeTokens, deactivatedSessions);
-    }
-
-    /**
-     * Increment failed login attempts
-     */
-    private void incrementLoginAttempts(String email, UUID accountId) {
-        LoginAttempt loginAttempt = loginAttemptRepository.findByEmail(email)
-                .orElse(LoginAttempt.builder()
-                        .email(email)
-                        .attemptCount(0)
-                        .build());
-
-        loginAttempt.incrementAttempt();
-        loginAttemptRepository.save(loginAttempt);
-
-        log.warn("Failed login attempt for email: {}. Count: {}", email, loginAttempt.getAttemptCount());
-
-        // If locked, optionally send email notification
-        if (loginAttempt.isLocked()) {
-            log.warn("Account locked for email: {}", email);
-            // emailService.sendAccountLockedEmail(email);
-        }
     }
 
     /**
@@ -574,4 +577,53 @@ public class AuthService {
                 .expiredAt(account.getEmailChangeExpiredAt())
                 .build();
     }
+
+    // ============================================
+    // PRIVATE HELPERS
+    // ============================================
+
+    /**
+     * Increment failed login attempts
+     */
+    private void incrementLoginAttempts(String email, UUID accountId) {
+        LoginAttempt loginAttempt = loginAttemptRepository.findByEmail(email)
+                .orElse(LoginAttempt.builder()
+                        .email(email)
+                        .attemptCount(0)
+                        .build());
+
+        loginAttempt.incrementAttempt();
+        loginAttemptRepository.save(loginAttempt);
+
+        log.warn("Failed login attempt for email: {}. Count: {}", email, loginAttempt.getAttemptCount());
+
+        // If locked, optionally send email notification
+        if (loginAttempt.isLocked()) {
+            log.warn("Account locked for email: {}", email);
+            // emailService.sendAccountLockedEmail(email);
+        }
+    }
+
+    /**
+     * Lấy roles từ User Service qua Internal API.
+     *
+     * Nếu User Service down hoặc user chưa có profile (vừa đăng ký,
+     * Kafka chưa xử lý xong) → trả về empty set, không fail login.
+     *
+     * User sẽ có roles đúng sau lần login tiếp theo hoặc khi refresh token.
+     */
+    private Set<String> fetchUserRoles(UUID accountId) {
+        try {
+            var userInfo = userServiceClient.getUserByAccountId(accountId);
+            Set<String> roles = userInfo.getRoles();
+            log.debug("Fetched roles for accountId={}: {}", accountId, roles);
+            return roles != null ? roles : Set.of();
+        } catch (Exception e) {
+            // Không fail login nếu User Service không available
+            log.warn("Could not fetch roles from User Service for accountId={}: {}. " +
+                    "Using empty roles.", accountId, e.getMessage());
+            return Set.of();
+        }
+    }
+
 }

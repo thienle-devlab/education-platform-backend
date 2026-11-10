@@ -5,11 +5,14 @@ import com.lethien.common_lib.dto.ErrorDetails;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -124,6 +127,21 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(403, ex.getMessage(), errorDetails));
     }
 
+    @ExceptionHandler(NotEligibleToReviewException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotEligibleToReview(
+            NotEligibleToReviewException ex,
+            WebRequest request
+    ) {
+        log.error("Not eligible to review: {}", ex.getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of("NOT_ELIGIBLE_TO_REVIEW", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(403, ex.getMessage(), errorDetails));
+    }
+
     // ============================================
     // 404 — NOT FOUND
     // ============================================
@@ -203,6 +221,71 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(404, ex.getMessage(), errorDetails));
     }
 
+    @ExceptionHandler(ReviewNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleReviewNotFound(
+            ReviewNotFoundException ex,
+            WebRequest request
+    ) {
+        log.error("Review not found: {}", ex.getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of("REVIEW_NOT_FOUND", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, ex.getMessage(), errorDetails));
+    }
+
+    @ExceptionHandler(SectionNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSectionNotFound(
+            SectionNotFoundException ex, WebRequest request
+    ) {
+        log.error("Section not found: {}", ex.getMessage());
+        ErrorDetails errorDetails = ErrorDetails.of("SECTION_NOT_FOUND", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, ex.getMessage(), errorDetails));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(
+            HttpMessageNotReadableException ex, WebRequest request) {
+
+        log.warn("Unreadable request body: {}", ex.getMostSpecificCause().getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of(
+                "MALFORMED_REQUEST", "Request body is malformed or contains an invalid value");
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, "Malformed request body", errorDetails));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, WebRequest request) {
+
+        String message = "Invalid value for parameter '" + ex.getName() + "'";
+        log.warn("Type mismatch: {}", message);
+
+        ErrorDetails errorDetails = ErrorDetails.of("INVALID_PARAMETER", message);
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(400, message, errorDetails));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(
+            NoResourceFoundException ex, WebRequest request) {
+
+        ErrorDetails errorDetails = ErrorDetails.of("NOT_FOUND", "Endpoint not found");
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(404, "Endpoint not found", errorDetails));
+    }
+
     // ============================================
     // 409 — CONFLICT
     // ============================================
@@ -252,6 +335,21 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(409, ex.getMessage(), errorDetails));
     }
 
+    @ExceptionHandler(AlreadyReviewedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAlreadyReviewed(
+            AlreadyReviewedException ex,
+            WebRequest request
+    ) {
+        log.error("Already reviewed: {}", ex.getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of("ALREADY_REVIEWED", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(409, ex.getMessage(), errorDetails));
+    }
+
     // ============================================
     // 422 — UNPROCESSABLE ENTITY
     // ============================================
@@ -272,6 +370,40 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(ApiResponse.error(422, ex.getMessage(), errorDetails));
+    }
+
+    @ExceptionHandler(ContentModificationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleContentModification(
+            ContentModificationException ex, WebRequest request) {
+        log.error("Content modification blocked: {}", ex.getMessage());
+        ErrorDetails errorDetails = ErrorDetails.of("CONTENT_MODIFICATION_BLOCKED", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.error(422, ex.getMessage(), errorDetails));
+    }
+
+    // ============================================
+    // 503 — SERVICE UNAVAILABLE
+    // ============================================
+
+    /**
+     * Handle UserServiceException — không thể gọi User Service.
+     * Trả 503 để client biết đây là lỗi tạm thời, có thể retry.
+     */
+    @ExceptionHandler(UserServiceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUserServiceException(
+            UserServiceException ex,
+            WebRequest request
+    ) {
+        log.error("User Service unavailable: {}", ex.getMessage());
+
+        ErrorDetails errorDetails = ErrorDetails.of(
+                "USER_SERVICE_UNAVAILABLE", ex.getMessage());
+        errorDetails.setPath(extractPath(request));
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(503, ex.getMessage(), errorDetails));
     }
 
     // ============================================

@@ -26,7 +26,6 @@ import java.util.UUID;
 @Builder
 public class ExerciseAttemptRequest {
 
-    @NotNull(message = "User ID is required")
     private UUID userId;
 
     @NotNull(message = "User answer is required")

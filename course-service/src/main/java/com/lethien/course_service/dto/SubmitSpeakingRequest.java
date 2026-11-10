@@ -23,7 +23,6 @@ import java.util.UUID;
 @Builder
 public class SubmitSpeakingRequest {
 
-    @NotNull(message = "User ID is required")
     private UUID userId;
 
     @NotBlank(message = "Audio URL is required")

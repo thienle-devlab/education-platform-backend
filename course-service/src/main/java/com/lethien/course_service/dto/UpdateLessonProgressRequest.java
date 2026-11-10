@@ -22,7 +22,6 @@ import java.util.UUID;
 @Builder
 public class UpdateLessonProgressRequest {
 
-    @NotNull(message = "User ID is required")
     private UUID userId;
 
     /** Số giây tích lũy thêm trong lần này (không phải tổng) */

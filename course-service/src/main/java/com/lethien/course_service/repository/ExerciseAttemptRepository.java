@@ -17,6 +17,8 @@ public interface ExerciseAttemptRepository extends JpaRepository<ExerciseAttempt
 
     Optional<ExerciseAttempt> findByUserIdAndExerciseIdAndAttemptNumber(UUID userId, UUID exerciseId, Integer attemptNumber);
 
+    boolean existsByExerciseId(UUID exerciseId);
+
     /**
      * Find the latest attempt for a user on a specific exercise.
      */

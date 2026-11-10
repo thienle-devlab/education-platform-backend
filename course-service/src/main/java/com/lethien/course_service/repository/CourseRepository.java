@@ -7,6 +7,7 @@ import com.lethien.course_service.entity.SkillType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,7 +15,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface CourseRepository extends JpaRepository<Course, UUID> {
+public interface CourseRepository extends JpaRepository<Course, UUID>, JpaSpecificationExecutor<Course> {
 
     // ============================================
     // FIND BY SLUG / INSTRUCTOR
@@ -34,20 +35,20 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     // FILTER QUERIES (published catalog)
     // ============================================
 
-    @Query("""
-        SELECT c FROM Course c
-        WHERE c.status = 'PUBLISHED'
-          AND (:skillType IS NULL OR c.skillType = :skillType)
-          AND (:level     IS NULL OR c.level     = :level)
-          AND (:maxPrice  IS NULL OR c.price    <= :maxPrice)
-        ORDER BY c.averageRating DESC NULLS LAST, c.totalEnrollments DESC
-        """)
-    Page<Course> findPublished(
-            @Param("skillType")SkillType skillType,
-            @Param("level") CourseLevel level,
-            @Param("maxPrice") BigDecimal maxPrice,
-            Pageable pageable
-            );
+//    @Query("""
+//        SELECT c FROM Course c
+//        WHERE c.status = 'PUBLISHED'
+//          AND (:skillType IS NULL OR c.skillType = :skillType)
+//          AND (:level     IS NULL OR c.level     = :level)
+//          AND (:maxPrice  IS NULL OR c.price    <= :maxPrice)
+//        ORDER BY c.averageRating DESC NULLS LAST, c.totalEnrollments DESC
+//        """)
+//    Page<Course> findPublished(
+//            @Param("skillType")SkillType skillType,
+//            @Param("level") CourseLevel level,
+//            @Param("maxPrice") BigDecimal maxPrice,
+//            Pageable pageable
+//            );
 
     // ============================================
     // FULL-TEXT SEARCH

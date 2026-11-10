@@ -20,7 +20,6 @@ import java.util.UUID;
 @Builder
 public class CreateCourseRequest {
 
-    @NotNull(message = "Instructor ID is required")
     private UUID instructorId;
 
     @NotBlank(message = "Title is required")

@@ -23,7 +23,6 @@ import java.util.UUID;
 @Builder
 public class SubmitWritingRequest {
 
-    @NotNull(message = "User ID is required")
     private UUID userId;
 
     @NotBlank(message = "Content is required")
